@@ -36,5 +36,10 @@ RUN chmod +x /usr/local/bin/main.out
 # Switch to non-root user
 USER appuser
 
+# curl is not in the image; busybox wget is. nginx listens on IPv4 only,
+# so use 127.0.0.1 (localhost resolves to ::1 first).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/check || exit 1
+
 # Start app and nginx
 CMD ["/bin/sh", "-c", "/usr/local/bin/main.out --port=9999 & nginx -g 'daemon off;'"]

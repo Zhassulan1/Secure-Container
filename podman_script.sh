@@ -9,7 +9,7 @@ podman run -d \
   --cap-drop all \
   --tmpfs /tmp:mode=1777 \
   --pids-limit 1024 \
-  --health-cmd 'CMD-SHELL curl -f http://localhost:8080/check || exit 1' \
+  --health-cmd 'wget -q -O /dev/null http://127.0.0.1:8080/check || exit 1' \
   --health-interval 30s \
   --health-retries 3 \
   --health-start-period 10s \

@@ -102,11 +102,21 @@ jobs:
 
     - name: Test Docker image
       run: |
-        docker run --rm -d --name test-container -p 8080:8080 ${{ env.IMAGE_NAME }}:latest
-        sleep 5
-        # Basic check that container is running
-        docker ps | grep test-container
-        docker stop test-container || true
+        # Same restrictions as docker-compose.yml; fail unless the healthcheck passes
+        docker run -d --name test-container -p 8080:8080 \
+          --cap-drop ALL --security-opt no-new-privileges \
+          --tmpfs /tmp:mode=1777 --pids-limit 1024 \
+          --health-interval 2s --health-start-period 2s \
+          ${{ env.IMAGE_NAME }}:latest
+        for i in $(seq 1 30); do
+          health=$(docker inspect -f '{{.State.Health.Status}}' test-container)
+          [ "$health" = "healthy" ] && break
+          sleep 2
+        done
+        docker inspect -f '{{json .State.Health}}' test-container
+        curl -fsS http://localhost:8080/check
+        docker rm -f test-container
+        [ "$health" = "healthy" ]
 
     - name: Export Docker image
       run: |

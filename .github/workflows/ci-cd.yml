@@ -47,11 +47,11 @@ jobs:
 
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-      continue-on-error: true
+
 
     - name: Generate HTML coverage report
       run: go tool cover -html=coverage.txt -o coverage.html
-      continue-on-error: true
+
 
     - name: Upload coverage reports as artifacts
       uses: actions/upload-artifact@v4
@@ -142,7 +142,7 @@ jobs:
         format: 'sarif'
         output: 'trivy-results.sarif'
         severity: 'CRITICAL,HIGH'
-      continue-on-error: true
+
 
     - name: Run Trivy vulnerability scanner (JSON)
       uses: aquasecurity/trivy-action@master
@@ -152,7 +152,7 @@ jobs:
         format: 'json'
         output: 'trivy-results.json'
         severity: 'CRITICAL,HIGH'
-      continue-on-error: true
+
 
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
@@ -160,7 +160,7 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
         category: 'trivy'
-      continue-on-error: true
+
 
     - name: Upload Trivy reports as artifacts
       uses: actions/upload-artifact@v4
@@ -197,7 +197,7 @@ jobs:
       run: |
         semgrep scan --config auto --sarif --output=semgrep.sarif
         semgrep scan --config auto --json --output=semgrep.json
-      continue-on-error: true
+
 
     - name: Upload Semgrep results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
@@ -205,7 +205,7 @@ jobs:
       with:
         sarif_file: semgrep.sarif
         category: 'semgrep'
-      continue-on-error: true
+
 
     - name: Upload Semgrep reports as artifacts
       uses: actions/upload-artifact@v4
@@ -246,25 +246,25 @@ jobs:
 
     - name: Run tests with coverage
       run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-      continue-on-error: true
+
 
     - name: Generate HTML coverage report
       run: go tool cover -html=coverage.txt -o coverage-sonar.html
-      continue-on-error: true
+
 
     - name: SonarCloud Scan
       uses: SonarSource/sonarqube-scan-action@v6
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      continue-on-error: true
+
 
     - name: SonarCloud Quality Gate Check
       uses: SonarSource/sonarqube-quality-gate-action@master
       timeout-minutes: 5
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      continue-on-error: true
+
 
     - name: Upload coverage reports as artifacts
       uses: actions/upload-artifact@v4

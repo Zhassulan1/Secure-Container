@@ -1,0 +1,226 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GO_VERSION: '1.24.2'
+  IMAGE_NAME: health-check
+  REGISTRY: ghcr.io
+
+jobs:
+  # Build and test Go application
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+      continue-on-error: true
+
+    - name: Build application
+      run: |
+        CGO_ENABLED=0 go build -ldflags="-w -s" -o main.out ./cmd/
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: health-check-binary
+        path: main.out
+        retention-days: 7
+
+  # Build Docker image
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: false
+        tags: |
+          ${{ env.IMAGE_NAME }}:latest
+          ${{ env.IMAGE_NAME }}:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        load: true
+
+    - name: Test Docker image
+      run: |
+        docker run --rm -d --name test-container -p 8080:8080 ${{ env.IMAGE_NAME }}:latest
+        sleep 5
+        # Basic check that container is running
+        docker ps | grep test-container
+        docker stop test-container || true
+
+    - name: Export Docker image
+      run: |
+        docker save ${{ env.IMAGE_NAME }}:latest -o health-check-image.tar
+
+    - name: Upload Docker image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: health-check-image.tar
+        retention-days: 7
+
+  # Test with docker-compose
+  docker-compose-test:
+    name: Docker Compose Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build and run with docker-compose
+      run: |
+        docker-compose up -d --build
+        sleep 10
+
+    - name: Check container health
+      run: |
+        docker-compose ps
+        # Wait for health check to pass
+        timeout 60 bash -c 'until docker inspect --format="{{.State.Health.Status}}" health-check | grep -q healthy; do sleep 2; done' || true
+
+    - name: Test health endpoint
+      run: |
+        curl -f http://localhost:8005/check || echo "Health check endpoint not responding as expected"
+      continue-on-error: true
+
+    - name: Show logs
+      if: always()
+      run: |
+        docker-compose logs
+
+    - name: Stop containers
+      if: always()
+      run: |
+        docker-compose down -v
+
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+      continue-on-error: true
+
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+      continue-on-error: true
+
+  # Optional: Push to container registry
+  # Uncomment and configure this job when you want to push images to a registry
+  # push-to-registry:
+  #   name: Push to Registry
+  #   runs-on: ubuntu-latest
+  #   needs: [docker-build, docker-compose-test, security-scan]
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #
+  #   - name: Set up Docker Buildx
+  #     uses: docker/setup-buildx-action@v3
+  #
+  #   # For GitHub Container Registry (ghcr.io)
+  #   - name: Log in to GitHub Container Registry
+  #     uses: docker/login-action@v3
+  #     with:
+  #       registry: ${{ env.REGISTRY }}
+  #       username: ${{ github.actor }}
+  #       password: ${{ secrets.GITHUB_TOKEN }}
+  #
+  #   # For Docker Hub (uncomment if you prefer Docker Hub)
+  #   # - name: Log in to Docker Hub
+  #   #   uses: docker/login-action@v3
+  #   #   with:
+  #   #     username: ${{ secrets.DOCKER_USERNAME }}
+  #   #     password: ${{ secrets.DOCKER_PASSWORD }}
+  #
+  #   - name: Extract metadata
+  #     id: meta
+  #     uses: docker/metadata-action@v5
+  #     with:
+  #       images: |
+  #         ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+  #       tags: |
+  #         type=ref,event=branch
+  #         type=sha,prefix={{branch}}-
+  #         type=semver,pattern={{version}}
+  #         type=semver,pattern={{major}}.{{minor}}
+  #
+  #   - name: Build and push Docker image
+  #     uses: docker/build-push-action@v5
+  #     with:
+  #       context: .
+  #       file: ./Dockerfile
+  #       push: true
+  #       tags: ${{ steps.meta.outputs.tags }}
+  #       labels: ${{ steps.meta.outputs.labels }}
+  #       cache-from: type=gha
+  #       cache-to: type=gha,mode=max

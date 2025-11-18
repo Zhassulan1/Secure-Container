@@ -105,7 +105,7 @@ jobs:
         path: health-check-image.tar
         retention-days: 7
 
-  # Test with docker-compose
+  # Test with docker compose
   docker-compose-test:
     name: Docker Compose Test
     runs-on: ubuntu-latest
@@ -115,14 +115,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Build and run with docker-compose
+    - name: Build and run with docker compose
       run: |
-        docker-compose up -d --build
+        docker compose up -d --build
         sleep 10
 
     - name: Check container health
       run: |
-        docker-compose ps
+        docker compose ps
         # Wait for health check to pass
         timeout 60 bash -c 'until docker inspect --format="{{.State.Health.Status}}" health-check | grep -q healthy; do sleep 2; done' || true
 
@@ -134,12 +134,12 @@ jobs:
     - name: Show logs
       if: always()
       run: |
-        docker-compose logs
+        docker compose logs
 
     - name: Stop containers
       if: always()
       run: |
-        docker-compose down -v
+        docker compose down -v
 
   # Security scanning
   security-scan:

@@ -218,60 +218,14 @@ jobs:
         retention-days: 30
 
   # SonarCloud SAST analysis
-  sonarcloud-sast:
-    name: SonarCloud SAST
+  sonarqube:
+    name: SonarQube
     runs-on: ubuntu-latest
-    needs: build-and-test
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Shallow clones should be disabled for better analysis
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Run tests with coverage
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-
-    - name: Generate HTML coverage report
-      run: go tool cover -html=coverage.txt -o coverage-sonar.html
-
-
-    - name: SonarCloud Scan
-      uses: SonarSource/sonarqube-scan-action@v6
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-    - name: SonarCloud Quality Gate Check
-      uses: SonarSource/sonarqube-quality-gate-action@master
-      timeout-minutes: 5
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-
-    - name: Upload coverage reports as artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: sonarcloud-coverage-report
-        path: |
-          coverage.txt
-          coverage-sonar.html
-        retention-days: 30
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

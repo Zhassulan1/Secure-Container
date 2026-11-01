@@ -1,5 +1,7 @@
 # Secure Container
 
+![CI](https://github.com/Zhassulan1/Secure-Container/actions/workflows/ci-cd.yml/badge.svg)
+
 A small Go health-check service (fasthttp, `GET /check`) behind nginx, packaged as a hardened container. The service itself is trivial; the repo is about the container setup and the CI around it.
 
 ## Hardening

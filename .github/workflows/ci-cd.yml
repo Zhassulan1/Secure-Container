@@ -254,12 +254,17 @@ jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+    needs: build-and-test
     # no SONAR_TOKEN on dependabot and fork PRs
     if: github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: test-coverage-reports
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
         env:
@@ -284,7 +289,7 @@ jobs:
         path: ${{ runner.temp }}/image
 
     - name: Log in to GHCR
-      uses: docker/login-action@v3
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
       with:
         registry: ghcr.io
         username: ${{ github.actor }}

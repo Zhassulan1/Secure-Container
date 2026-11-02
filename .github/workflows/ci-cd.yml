@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   IMAGE_NAME: health-check
-  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/zhassulan1/health-check
 
 jobs:
   # Build and test Go application
@@ -98,6 +105,8 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
         load: true
+        labels: |
+          org.opencontainers.image.source=https://github.com/Zhassulan1/Secure-Container
 
     - name: Test Docker image
       run: |
@@ -107,7 +116,7 @@ jobs:
           --tmpfs /tmp:mode=1777 --pids-limit 1024 \
           --health-interval 2s --health-start-period 2s \
           ${{ env.IMAGE_NAME }}:latest
-        for i in $(seq 1 30); do
+        for _ in $(seq 1 30); do
           health=$(docker inspect -f '{{.State.Health.Status}}' test-container)
           [ "$health" = "healthy" ] && break
           sleep 2
@@ -140,8 +149,8 @@ jobs:
       actions: read
 
     env:
-      # Trivy 0.67.2, pinned by digest
-      TRIVY_IMAGE: aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08
+      # Trivy 0.76.1, pinned by digest
+      TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
 
     steps:
     - name: Checkout code
@@ -170,6 +179,9 @@ jobs:
         # Repository: go.mod dependencies and committed secrets
         trivy fs --severity CRITICAL,HIGH --format sarif --output /reports/trivy-fs.sarif /src
         trivy fs --severity CRITICAL,HIGH --format json --output /reports/trivy-fs.json /src
+        # fail on fixable CRITICAL/HIGH
+        trivy image --input /image/health-check-image.tar --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --format table
+        trivy fs --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --format table /src
 
     - name: Upload Trivy image results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
@@ -242,6 +254,8 @@ jobs:
   sonarqube:
     name: SonarQube
     runs-on: ubuntu-latest
+    # no SONAR_TOKEN on dependabot and fork PRs
+    if: github.actor != 'dependabot[bot]' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -250,3 +264,36 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Push image to GHCR
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: [docker-build, security-scan, semgrep-sast]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Download Docker image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-image
+        path: ${{ runner.temp }}/image
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push image
+      run: |
+        docker load -i "$RUNNER_TEMP/image/health-check-image.tar"
+        docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE }}:latest
+        docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.IMAGE }}:${{ github.sha }}
+        docker push ${{ env.IMAGE }}:latest
+        docker push ${{ env.IMAGE }}:${{ github.sha }}

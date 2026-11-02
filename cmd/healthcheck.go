@@ -17,13 +17,19 @@ func healthcheckHandler(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		return
 	}
+	ctx.SetContentType("application/json")
 	ctx.Write(js)
 
 }
 
-func main() {
+func newRouter() *router.Router {
 	r := router.New()
 	r.GET("/check", healthcheckHandler)
+	return r
+}
+
+func main() {
+	r := newRouter()
 
 	var port = flag.String("port", "8001", "API server port")
 	flag.Parse()

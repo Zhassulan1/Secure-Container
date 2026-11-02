@@ -1,19 +1,21 @@
 # Build stage
-FROM golang:1.24.2-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum* ./
+COPY go.mod go.sum ./
+
+RUN go mod download
 
 COPY . .
 # Build with security flags
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o main.out ./cmd/
 
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24 AS runtime
 
 # Install only the needed packages
-RUN apk add --no-cache nginx
+RUN apk upgrade --no-cache && apk add --no-cache nginx
 
 COPY nginx.conf /etc/nginx/http.d/default.conf
 

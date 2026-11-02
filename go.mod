@@ -1,6 +1,6 @@
 module soos
 
-go 1.24.2
+go 1.27.3
 
 require (
 	github.com/fasthttp/router v1.5.4
@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/savsgio/gotils v0.0.0-20250408102913-196191ec6287 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 )

@@ -43,3 +43,9 @@ func TestCheck(t *testing.T) {
 		fasthttp.ReleaseResponse(resp)
 	}
 }
+
+func TestServeBadAddr(t *testing.T) {
+	if err := serve("bad address"); err == nil {
+		t.Fatal("expected an error")
+	}
+}

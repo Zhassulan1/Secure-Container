@@ -28,15 +28,16 @@ func newRouter() *router.Router {
 	return r
 }
 
-func main() {
-	r := newRouter()
+func serve(addr string) error {
+	log.Printf("Server is listening on %s", addr)
+	return fasthttp.ListenAndServe(addr, newRouter().Handler)
+}
 
+func main() {
 	var port = flag.String("port", "8001", "API server port")
 	flag.Parse()
 
-	addr := ":" + *port
-	log.Printf("Server is listening on %s", addr)
-	if err := fasthttp.ListenAndServe(addr, r.Handler); err != nil {
+	if err := serve(":" + *port); err != nil {
 		log.Fatalf("Error in ListenAndServe: %v", err)
 	}
 }

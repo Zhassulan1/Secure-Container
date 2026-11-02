@@ -16,4 +16,4 @@ podman run -d \
   --health-timeout 5s \
   --health-on-failure restart \
   --restart on-failure:3 \
-  docker.io/zhassulan1/health-check
+  ghcr.io/zhassulan1/health-check:latest

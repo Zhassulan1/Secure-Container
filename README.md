@@ -8,6 +8,7 @@ A small Go health-check service (fasthttp, `GET /check`) behind nginx, packaged 
 
 Image (`Dockerfile`):
 - multi-stage build: the Go binary is built static (`CGO_ENABLED=0`) and stripped (`-ldflags="-w -s"`), the runtime stage is alpine with nginx and that binary
+- `apk upgrade` at build time and floating patch tags (`golang:1.27-alpine`, `alpine:3.24`), Dependabot for the rest
 - runs as an unprivileged `appuser`
 - setuid/setgid bits are removed from every file in the image
 - `HEALTHCHECK` requests `/check` through nginx with busybox `wget` (there is no curl in the image)
@@ -24,20 +25,30 @@ Runtime (`docker-compose.yml`, `podman_script.sh`):
 
 ## Run
 
-Docker:
+Docker, from source:
 
 ```bash
 docker compose up -d --build
 curl http://localhost:8005/check
 ```
 
+Published image (CI pushes it to GHCR on every push to `main`):
+
+```bash
+docker run -d --name health-check -p 8005:8080 \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:mode=1777 --pids-limit 1024 \
+  ghcr.io/zhassulan1/health-check:latest
+```
+
 Podman (Fedora/RHEL, the script also opens the port in firewalld):
 
 ```bash
-podman build -t docker.io/zhassulan1/health-check .   # or use the published image
-bash podman_script.sh
+bash podman_script.sh            # pulls ghcr.io/zhassulan1/health-check:latest
 curl http://localhost:8002/check
 ```
+
+Or build it locally first: `podman build -t ghcr.io/zhassulan1/health-check:latest .`
 
 To apply `containers.conf`, copy it to `~/.config/containers/containers.conf`.
 
@@ -60,6 +71,7 @@ With Podman, use `podman` instead of `docker`.
 |---|---|
 | Build and Test | `go mod verify`, `go vet`, `go test -race` with a coverage report, static build |
 | Docker Build | builds the image, starts it with the compose restrictions and waits until the healthcheck passes |
-| Security Scan | Trivy on the built image and on the repository (`aquasec/trivy` pinned by digest), SARIF to the Security tab |
+| Security Scan | Trivy on the built image and on the repository (`aquasec/trivy` pinned by digest), SARIF to the Security tab, fails on fixable CRITICAL/HIGH |
 | Semgrep SAST | `semgrep --config auto`, SARIF to the Security tab |
-| SonarQube | SonarCloud analysis |
+| SonarQube | SonarCloud analysis, skipped for dependabot and fork PRs |
+| Publish | pushes the scanned image to `ghcr.io/zhassulan1/health-check` (`latest` and commit sha), only on push to `main` |
